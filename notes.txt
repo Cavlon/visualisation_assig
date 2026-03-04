@@ -1,0 +1,33 @@
+================================
+    DATA
+================================
+
+The data is from: https://svs.gsfc.nasa.gov/4720
+
+The values of the 16-bit unsigned heightmap correspond to half-meters
+So a value of 100 would mean 50 meters
+The unsigned heightmap is also offset by +20000 to make the values positive
+That means the real elevation relative to sea level is (x*0.5) - 20000
+Sea level is 1727400 meters
+
+The illumination maps are just textures to colour the surface like is visible to humans
+They aren't reflective of the actual values recorded
+There is a 1k, 2k, and 4k version, each are identical just at different resolutions
+
+================================
+    IDEAS
+================================
+
+Add heightmap displacement
+Add contour lines
+Add functionality to swap between height visualistions
+Potentially allow them to be combined
+Add lines denoting longtitude and latitude
+Add custom colour map to more clearly highlight height difference
+Add custom colour map to more clearly highlight illumination difference
+
+================================
+    OTHER
+================================
+
+Remember to delete the GMT package from fedora afterwards

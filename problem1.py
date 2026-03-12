@@ -7,38 +7,50 @@ from holoviews import streams
 np.set_printoptions(suppress=True)
 
 # Load datasets, converting data to meters and removing the offset
-height_data = pygmt.grd2xyz("dataset/dataset/heightmaps/ldem_4_uint.tif+s0.5+o-10000", output_type='numpy')
-light_data = pygmt.grd2xyz("dataset/dataset/illumination/lroc_color_poles_2k.tif", output_type='numpy')
+height_data_low = pygmt.grd2xyz("dataset/dataset/heightmaps/ldem_4_uint.tif+s0.5+o-10000", output_type='numpy')
+light_data_low = pygmt.grd2xyz("dataset/dataset/illumination/lroc_color_poles_2k.tif", output_type='numpy')
+height_data_high = pygmt.grd2xyz("dataset/dataset/heightmaps/ldem_16_uint.tif+s0.5+o-10000", output_type='numpy')
+light_data_high = pygmt.grd2xyz("dataset/dataset/illumination/lroc_color_poles_4k.tif", output_type='numpy')
 
 # Map coordinates to longitude and latitude, also recenter 0 degrees longitude and latitude
-height_data[:, 0] = ((height_data[:, 0] / 1440) * 360) - 180
-height_data[:, 1] = ((height_data[:, 1] / 720) * 180) - 90
+height_data_low[:, 0] = ((height_data_low[:, 0] / 1440) * 360) - 180
+height_data_low[:, 1] = ((height_data_low[:, 1] / 720) * 180) - 90
+height_data_high[:, 0] = ((height_data_high[:, 0] / 5760) * 360) - 180
+height_data_high[:, 1] = ((height_data_high[:, 1] / 2880) * 180) - 90
 
-light_data[:, 0] = ((light_data[:, 0] / 2048) * 360) - 180
-light_data[:, 1] = ((light_data[:, 1] / 1024) * 180) - 90
+light_data_low[:, 0] = ((light_data_low[:, 0] / 2048) * 360) - 180
+light_data_low[:, 1] = ((light_data_low[:, 1] / 1024) * 180) - 90
+light_data_high[:, 0] = ((light_data_high[:, 0] / 4096) * 360) - 180
+light_data_high[:, 1] = ((light_data_high[:, 1] / 2048) * 180) - 90
 
 # Normalise the lighting data
-light_data[:, 2] = light_data[:, 2] / 255
+light_data_low[:, 2] = light_data_low[:, 2] / 255
+light_data_high[:, 2] = light_data_high[:, 2] / 255
 
-# Create a geographic grid from the longitudes and latitudes
-grid = pygmt.xyz2grd(height_data, region="-180/180/-90/90", spacing=(0.25, 0.25), coltypes="0x,1y", registration='p')
-light_grid = pygmt.xyz2grd(light_data, region="-180/180/-90/90", spacing=(360/2048, 180/1024), coltypes="0x,1y", registration='p')
-light_grid = pygmt.grdsample(light_grid, spacing=(0.25, 0.25))
+# Create a geographic height_grid_low from the longitudes and latitudes
+height_grid_low = pygmt.xyz2grd(height_data_low, region="-180/180/-90/90", spacing=(0.25, 0.25), coltypes="0x,1y", registration='p')
+height_grid_high = pygmt.xyz2grd(height_data_high, region="-180/180/-90/90", spacing=(0.0625, 0.0625), coltypes="0x,1y", registration='p')
+
+light_grid_low = pygmt.xyz2grd(light_data_low, region="-180/180/-90/90", spacing=(360/2048, 180/1024), coltypes="0x,1y", registration='p')
+light_grid_high = pygmt.xyz2grd(light_data_high, region="-180/180/-90/90", spacing=(360/4096, 180/2048), coltypes="0x,1y", registration='p')
+
+light_grid_low = pygmt.grdsample(light_grid_low, spacing=(0.25, 0.25))
+light_grid_high = pygmt.grdsample(light_grid_high, spacing=(0.0625, 0.0625))
 
 # Generate the slope data in degrees
-slope_gridS = pygmt.grdgradient(grid, azimuth=180)
-slope_grid = pygmt.grdgradient(grid, azimuth=90)
-slope_grid.values = np.rad2deg(np.arctan(np.sqrt(slope_gridS.values**2 + slope_grid.values**2)))
+slope_gridS = pygmt.grdgradient(height_grid_low, azimuth=180)
+slope_grid_low = pygmt.grdgradient(height_grid_low, azimuth=90)
+slope_grid_low.values = np.rad2deg(np.arctan(np.sqrt(slope_gridS.values**2 + slope_grid_low.values**2)))
 
-print(pygmt.grdinfo(grid))
-print(pygmt.grdinfo(light_grid))
-print(pygmt.grdinfo(slope_grid))
+slope_gridS = pygmt.grdgradient(height_grid_high, azimuth=180)
+slope_grid_high = pygmt.grdgradient(height_grid_high, azimuth=90)
+slope_grid_high.values = np.rad2deg(np.arctan(np.sqrt(slope_gridS.values**2 + slope_grid_high.values**2)))
 
 pn.extension()
 hv.extension('bokeh')
 
 # Creates the colour bar
-def plot_colourbar(display_data, cmap, cdepth):
+def plot_colourbar(display_data, cmap, cdepth, height):
     fig = pygmt.Figure()
 
     if display_data == 'Illumination':
@@ -53,20 +65,20 @@ def plot_colourbar(display_data, cmap, cdepth):
     
     fig.savefig("plots/colourbar.png")
     
-    return pn.pane.PNG("plots/colourbar.png", width=100, height=500)
+    return pn.pane.PNG("plots/colourbar.png", width=100, height=height)
 
 # Plots the map in orthographic view to model a globe
 def plot_globe(lat, long, display_data, contour_int, cmap, cdepth):
     fig = pygmt.Figure()
 
     if display_data == 'Illumination':
-        display_grid = light_grid
+        display_grid = light_grid_low
         pygmt.makecpt(cmap=str.lower(cmap), series=[0, 1, f"{int(cdepth)+1}+n"])
     elif display_data == 'Height':
-        display_grid = grid
+        display_grid = height_grid_low
         pygmt.makecpt(cmap=str.lower(cmap), series=[-10000, 10000, f"{int(cdepth)+1}+n"])
     else:
-        display_grid = slope_grid
+        display_grid = slope_grid_low
         pygmt.makecpt(cmap=str.lower(cmap), series=[0, 10, f"{int(cdepth)+1}+n"])
 
     # Plot the contour map
@@ -77,7 +89,7 @@ def plot_globe(lat, long, display_data, contour_int, cmap, cdepth):
         frame="a45fg45",
     )
     if contour_int > 0:
-        fig.grdcontour(grid=grid, levels=contour_int)
+        fig.grdcontour(grid=height_grid_low, levels=contour_int)
 
     fig.savefig("plots/globe.png")
     
@@ -92,13 +104,13 @@ def plot_interactive_map(display_data, cmap, cdepth):
     fig = pygmt.Figure()
 
     if display_data == 'Illumination':
-        display_grid = light_grid
+        display_grid = light_grid_low
         pygmt.makecpt(cmap=str.lower(cmap), series=[0, 1, f"{int(cdepth)+1}+n"])
     elif display_data == 'Height':
-        display_grid = grid
+        display_grid = height_grid_low
         pygmt.makecpt(cmap=str.lower(cmap), series=[-10000, 10000, f"{int(cdepth)+1}+n"])
     else:
-        display_grid = slope_grid
+        display_grid = slope_grid_low
         pygmt.makecpt(cmap=str.lower(cmap), series=[0, 10, f"{int(cdepth)+1}+n"])
 
     # Plot the 2D map
@@ -120,18 +132,18 @@ def plot_interactive_map(display_data, cmap, cdepth):
 
 # Plots the whole data according to the visualisation mode chosen
 def plot_map(display_data, contour_int, cmap, cdepth, vis_type):
-    print("Regenerating...")
+    print("Regenerating Map...")
 
     fig = pygmt.Figure()
 
     if display_data == 'Illumination':
-        display_grid = light_grid
+        display_grid = light_grid_low
         pygmt.makecpt(cmap=str.lower(cmap), series=[0, 1, f"{int(cdepth)+1}+n"])
     elif display_data == 'Height':
-        display_grid = grid
+        display_grid = height_grid_low
         pygmt.makecpt(cmap=str.lower(cmap), series=[-10000, 10000, f"{int(cdepth)+1}+n"])
     else:
-        display_grid = slope_grid
+        display_grid = slope_grid_low
         pygmt.makecpt(cmap=str.lower(cmap), series=[0, 10, f"{int(cdepth)+1}+n"])
 
     # Plot the selected visualisation type
@@ -144,11 +156,11 @@ def plot_map(display_data, contour_int, cmap, cdepth, vis_type):
             frame="a45fg45",
         )
         if contour_int > 0:
-            fig.grdcontour(grid=grid, levels=contour_int)
+            fig.grdcontour(grid=height_grid_low, levels=contour_int)
     else:
         # Plot the 3D displacement map
         fig.grdview(
-            grid=grid,
+            grid=height_grid_low,
             drapegrid=display_grid,
             perspective=[135, 30],
             projection="Kf18c",
@@ -164,6 +176,84 @@ def plot_map(display_data, contour_int, cmap, cdepth, vis_type):
     print("Regeneration Completed")
     
     return pn.pane.PNG("plots/map.png", width=700, height=500)
+
+# Plots the whole data according to the visualisation mode chosen
+def plot_region(bounds, display_data, contour_int, cmap, cdepth, vis_type):
+    print("Regenerating Region...")
+    
+    left, bottom, right, top = map_x(bounds[0]), map_y(bounds[1]), map_x(bounds[2]), map_y(bounds[3])
+
+    # Bound the selection
+    if top > 90:
+        top = 90
+    if bottom > 90:
+        bottom = 90
+    if top < -90:
+        top = -90
+    if bottom < -90:
+        bottom = -90
+    
+    # Allow for selections across 180 degrees by dragging of the edge
+    while left < -180:
+        left += 360
+        right += 360
+    
+    # Fall back on previously made selection if the new one is invalid
+    if left == right or bottom == top:
+        bounds = selected_bounds
+
+        if selected_bounds == (0, 0, 0, 0):
+            return None
+    else:
+        bounds = (left, bottom, right, top)
+
+    fig = pygmt.Figure()
+
+    if display_data == 'Illumination':
+        display_grid = light_grid_high
+        pygmt.makecpt(cmap=str.lower(cmap), series=[0, 1, f"{int(cdepth)+1}+n"])
+    elif display_data == 'Height':
+        display_grid = height_grid_high
+        pygmt.makecpt(cmap=str.lower(cmap), series=[-10000, 10000, f"{int(cdepth)+1}+n"])
+    else:
+        display_grid = slope_grid_high
+        pygmt.makecpt(cmap=str.lower(cmap), series=[0, 10, f"{int(cdepth)+1}+n"])
+    
+    region_center = (bounds[0]+bounds[2])/2
+
+    # Plot the selected visualisation type
+    if vis_type == '2D':
+        # Plot the 2D map
+        fig.grdimage(
+            grid=display_grid,
+            region=[bounds[0], bounds[2], bounds[1], bounds[3]],
+            projection=f"T{region_center}/18c",
+            cmap=True,
+            frame="afg",
+        )
+        if contour_int > 0:
+            fig.grdcontour(grid=height_grid_high, levels=contour_int, annotation=contour_int)
+    else:
+
+        # Plot the 3D displacement map
+        fig.grdview(
+            grid=height_grid_high,
+            drapegrid=display_grid,
+            perspective=[135, 30],
+            region=[bounds[0], bounds[2], bounds[1], bounds[3]],
+            projection=f"T{region_center}/18c",
+            zscale=0.2,
+            surftype="s",
+            cmap=True,
+            frame="afg",
+            shading=True,
+        )
+    
+    fig.savefig("plots/region.png")
+
+    print("Regeneration Completed")
+    
+    return pn.Row(plot_colourbar(display_data, cmap, cdepth, 400), pn.pane.PNG("plots/region.png", width=500, height=400))
 
 # MAP BOUNDS: 0.05, 0.05 to 0.98, 0.98
 # Map a x-coordinate from the interactive map to a longitude
@@ -186,9 +276,9 @@ def sample_point(x, y):
         click_pos = (x, y)
     
     # Sample the data from the clicked point
-    elevation = pygmt.grdtrack(points=[click_pos], grid=grid)
-    illumination = pygmt.grdtrack(points=[click_pos], grid=light_grid)
-    slope = pygmt.grdtrack(points=[click_pos], grid=slope_grid)
+    elevation = pygmt.grdtrack(points=[click_pos], grid=height_grid_low)
+    illumination = pygmt.grdtrack(points=[click_pos], grid=light_grid_low)
+    slope = pygmt.grdtrack(points=[click_pos], grid=slope_grid_low)
 
     return pn.Row(
         "**Point Info:**", 
@@ -200,7 +290,7 @@ def sample_point(x, y):
     )
 
 selected_bounds = (0, 0, 0, 0)
-def region_select(bounds):
+def update_bounds(bounds):
     global selected_bounds
 
     left, bottom, right, top = map_x(bounds[0]), map_y(bounds[1]), map_x(bounds[2]), map_y(bounds[3])
@@ -244,12 +334,13 @@ cdepth_toggle = pn.widgets.ToggleGroup(name='Colour Depth', options=['100', '10'
 vis_toggle = pn.widgets.ToggleGroup(name='Visualisation', options=['2D', '3D'], behavior="radio")
 
 # Bind interactive elements to plots
-colour_bar = pn.bind(plot_colourbar, display_data=display_data_toggle, cmap=cmap_toggle, cdepth=cdepth_toggle)
+colour_bar = pn.bind(plot_colourbar, display_data=display_data_toggle, cmap=cmap_toggle, cdepth=cdepth_toggle, height=500)
 globe = pn.bind(plot_globe, lat=lat_slider, long=long_slider, display_data=display_data_toggle, contour_int=contour_slider, cmap=cmap_toggle, cdepth=cdepth_toggle)
 plot = pn.bind(plot_map, display_data=display_data_toggle, contour_int=contour_slider, cmap=cmap_toggle, cdepth=cdepth_toggle, vis_type=vis_toggle)
 interactive = pn.bind(plot_interactive_map, display_data=display_data_toggle, cmap=cmap_toggle, cdepth=cdepth_toggle)
 sample_text = pn.bind(sample_point, x=click_handler.param.x, y=click_handler.param.y)
-region_plot = pn.bind(region_select, bounds=region_handler.param.bounds)
+region_update = pn.bind(update_bounds, bounds=region_handler.param.bounds)
+region_plot = pn.bind(plot_region, bounds=region_handler.param.bounds, display_data=display_data_toggle, contour_int=contour_slider, cmap=cmap_toggle, cdepth=cdepth_toggle, vis_type=vis_toggle)
 
 # Format the display
 layout = pn.Column(
@@ -259,11 +350,11 @@ layout = pn.Column(
     pn.Row("### Visualised Data:", display_data_toggle), 
     pn.Row("### Colour Map:", cmap_toggle,"### Colour Bands:", cdepth_toggle), 
     pn.Row("### Plot Type:", vis_toggle), 
-    pn.Row(colour_bar, globe, plot),#
+    pn.Row(colour_bar, globe, plot),
     "### Click the map to sample a point or switch to box select mode with right-click to select a region",
     sample_text,
-    region_plot,
-    interactive
+    region_update,
+    pn.Row(interactive, region_plot)
 )
 
 layout.show()

@@ -1,10 +1,12 @@
+import os
 import pygmt
 import numpy as np
 import panel as pn
 import holoviews as hv
 from holoviews import streams
 
-np.set_printoptions(suppress=True)
+if not os.path.exists("plots"):
+    os.makedirs("plots")
 
 # Load datasets, converting data to meters and removing the offset
 height_data_low = pygmt.grd2xyz("dataset/dataset/heightmaps/ldem_4_uint.tif+s0.5+o-10000", output_type='numpy')
@@ -242,7 +244,7 @@ def plot_region(bounds, display_data, contour_int, cmap, cdepth, vis_type):
             perspective=[135, 30],
             region=[bounds[0], bounds[2], bounds[1], bounds[3]],
             projection=f"T{region_center}/18c",
-            zscale=0.2,
+            zscale=0.0002,
             surftype="s",
             cmap=True,
             frame="afg",
@@ -258,11 +260,11 @@ def plot_region(bounds, display_data, contour_int, cmap, cdepth, vis_type):
 # MAP BOUNDS: 0.05, 0.05 to 0.98, 0.98
 # Map a x-coordinate from the interactive map to a longitude
 def map_x(x):
-    return (((x - 0.05) / 0.9325) * 360) - 180
+    return int((((x - 0.05) / 0.9325) * 360) - 180)
 
 # Map a y-coordinate from the interactive map to a latitude
 def map_y(y):
-    return (((y - 0.05) / 0.93) * 180) - 90
+    return int((((y - 0.05) / 0.93) * 180) - 90)
 
 click_pos = (0, 0)
 def sample_point(x, y):
@@ -315,10 +317,10 @@ def update_bounds(bounds):
     if right != left and top != bottom:
         selected_bounds = (left, bottom, right, top)
     
-    left = f"{abs(selected_bounds[0]):.2f}{'E' if selected_bounds[0] > 0 else 'W'}"
-    right = f"{abs(selected_bounds[2]):.2f}{'E' if selected_bounds[2] > 0 else 'W'}"
-    top = f"{abs(selected_bounds[3]):.2f}{'N' if selected_bounds[3] > 0 else 'S'}"
-    bottom = f"{abs(selected_bounds[1]):.2f}{'N' if selected_bounds[1] > 0 else 'S'}"
+    left = f"{abs(selected_bounds[0])}{'E' if selected_bounds[0] > 0 else 'W'}"
+    right = f"{abs(selected_bounds[2])}{'E' if selected_bounds[2] > 0 else 'W'}"
+    top = f"{abs(selected_bounds[3])}{'N' if selected_bounds[3] > 0 else 'S'}"
+    bottom = f"{abs(selected_bounds[1])}{'N' if selected_bounds[1] > 0 else 'S'}"
 
     return pn.Row(f"**Longitude Bounds:** [{left}, {right}]", f"**Latitude Bounds:**[{bottom}, {top}]")
 
@@ -351,7 +353,7 @@ layout = pn.Column(
     pn.Row("### Colour Map:", cmap_toggle,"### Colour Bands:", cdepth_toggle), 
     pn.Row("### Plot Type:", vis_toggle), 
     pn.Row(colour_bar, globe, plot),
-    "### Click the map to sample a point or switch to box select mode with right-click to select a region",
+    "### Click the map below to sample a point or switch to box select mode with right-click to select a region",
     sample_text,
     region_update,
     pn.Row(interactive, region_plot)
